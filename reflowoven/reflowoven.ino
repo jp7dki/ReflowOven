@@ -58,7 +58,7 @@ void setup()
   char_lcd->init();
   char_lcd->disp_on();
 
-  controller->start(13.5);
+  controller->stop();
 
   pinMode(START_IN, INPUT_PULLUP);     // start button input
 
