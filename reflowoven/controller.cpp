@@ -7,60 +7,56 @@
 #include "controller.h"
 
 // コンストラクタ
-Controller::Controller(uint8_t pin)
+Controller::Controller(float k, float k_p, float k_i, float k_d, float delta_t)
 {
-  this->output_pin = pin;                 // 制御出力(出力ピン)を設定
   this->state = STATE_STOP;         // 初期状態は停止
+  this->k = k;                      // 制御パラメータを設定
+  this->k_p = k_p;
+  this->k_i = k_i;
+  this->k_d = k_d;
+  this->delta_t = delta_t;
 }
 
 void Controller::init(void)
 {
-  pinMode(this->output_pin, OUTPUT);      // ピンモードを設定
-  set_output(OUTPUT_OFF);
+  
 }
 
-void Controller::start(float target_temp)
+void Controller::start()
 {
   // controller start
-  this->target_temp = target_temp;
   this->state = STATE_START;
-  
+  this->pre_err = 0.0;
+  this->err = 0.0;
+  this->integral = 0.0;  
 }
 
-uint8_t Controller::update(float temp)
+uint8_t Controller::update(float feedback_temp, float target_temp)
 {
   // controller update
-  if(this->state != STATE_START){
-    set_output(OUTPUT_OFF);
-    return -1;
-  }
+  float pid_val;  
   
-  // 単純なONOFF制御する
-  if(temp > this->target_temp){
-    set_output(OUTPUT_OFF);
-    return 0;
+  if(this->state != STATE_START){
+    this->duty = 0;
+    return -1;
   }else{
-    set_output(OUTPUT_ON);
-    return 1;
+    // PID制御を実行
+    this->pre_err = this->err;
+    this->err = target_temp - feedback_temp;
+    this->integral += (this->err + this->pre_err) / 2.0 * this->delta_t;
+  
+    pid_val = this->k_p * this->err + this->k_i * integral + this->k_d * (this->err - this->pre_err)/this->delta_t;
+  
+    this->duty = int(k*pid_val);
+    
+    return 0;
   }
-
-  return 0;
 }
 
 void Controller::stop(void)
 {
   // controller stop
   this->state = STATE_STOP;
+  this->duty = 0;
   
-}
-
-void Controller::set_output(uint8_t output)
-{
-  if(output == OUTPUT_ON){
-    // Output on
-    digitalWrite(this->output_pin, SSR_ON);
-  }else{
-    // Output off
-    digitalWrite(this->output_pin, SSR_OFF);
-  }
 }

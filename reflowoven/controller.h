@@ -24,17 +24,19 @@ typedef enum{
 class Controller
 {
   public:
-    Controller(uint8_t pin);                  // Constructor
+    Controller(float k, float k_p, float k_i, float k_d, float delta_t);                  // Constructor
     void init();
-    void start(float target_val);     // start control
-    uint8_t update(float temp);                  // controller update
+    void start();     // start control
+    uint8_t update(float feedback_temp, float target_temp);                  // controller update
     void stop();
+    int duty;
 
   private:
-    void set_output(uint8_t output);
-    uint8_t output_pin;   // output pin
     controller_state state;    // Internal State
-    float target_temp; // target value
+    float k, k_p, k_i, k_d;    // PID parameter
+    float delta_t;          // PID parameter (control period[s])
+    float pre_err, err;     // PID error
+    float integral;         // 積分値
     
 };
 
