@@ -20,11 +20,11 @@
 
 #define LOOP_DELAY 100      // ループディレイ(おおよその制御周期) [ms]
 
-#define K 900.0
+#define K 500.0
 #define KP 0.006294076
 #define KI 0.0000572189
 #define KD 0.100075815
-#define DT 1.0
+#define DT 0.5
 
 // state machine
 typedef enum{
@@ -42,12 +42,12 @@ Char_lcd *char_lcd;
 
 Reflow_state reflow_state;
 Reflow_state next_reflow_state;
-float temp_preheat = 150.0;         // プリヒート温度
-float temp_heat = 220;              // 本加熱温度
+float temp_preheat = 120.0;         // プリヒート温度
+float temp_heat = 150.0;              // 本加熱温度
 uint16_t time_preheat = 60;         // プリヒート時間
 uint16_t time_heat = 10;            // 本加熱時間
 uint16_t time_cool = 60;            // 冷却時間
-uint16_t pwm_period = 1000;          // PWM周期(ms)
+uint16_t pwm_period = 500;          // PWM周期(ms)
 uint16_t pwm_duty = 0;              // PWMのデューティ
 
 uint32_t time_count;
@@ -57,13 +57,17 @@ volatile boolean flg = false;
 volatile int counter = 0;
 volatile int output = 0;
 
+volatile boolean temp_flg = false;
+volatile float temp_ave = 0.0;
+
 volatile SemaphoreHandle_t timerSemaphore;    // 割り込み発生状態を表すセマフォ
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;   //排他制御を行うための変数
 
 
 void IRAM_ATTR interrupt0(){
-  
+
   portENTER_CRITICAL(&timerMux);    // 排他制御開始
+  
   counter++;
   if(counter > controller->duty){
     // pin set low
@@ -81,6 +85,7 @@ void IRAM_ATTR interrupt0(){
   }else{
     digitalWrite(SSR_OUT, LOW);
   }
+  temp_flg = true;
   portEXIT_CRITICAL(&timerMux);     // 排他制御終了
   xSemaphoreGiveFromISR(timerSemaphore, NULL);    // セマフォを開放
   
@@ -123,9 +128,16 @@ void loop()
   float target_temp=0.0;
 
   if(xSemaphoreTake(timerSemaphore,0) == pdTRUE){
+    if(temp_flg==true){
+      temp_ave += temp_sensor->read_temp();
+      temp_flg = false;
+    }
+    
     if(flg==true){
 
-      temp = temp_sensor->read_temp();
+      //temp = temp_sensor->read_temp();
+      temp = temp_ave / pwm_period;
+      temp_ave = 0;
 
       // state machine control
       switch(reflow_state){
@@ -155,7 +167,7 @@ void loop()
         case REFLOW_STATE_PREHEATING:
           // プリヒート動作
           char_lcd->write_str(0,"PREHEAT");
-          if(time_count >= time_preheat){
+          if(time_count >= time_preheat*2){
             next_reflow_state = REFLOW_STATE_HEATING_RISE;
             target_temp = temp_heat;
           }else{
@@ -167,7 +179,7 @@ void loop()
         case REFLOW_STATE_HEATING_RISE:
           // 本加熱温度まで上昇
           char_lcd->write_str(0,"MAINRISE");
-          if(temp >= temp_heat){
+          if(temp >= temp_heat-5.0){
             next_reflow_state = REFLOW_STATE_HEATING;
             time_count = 0;
           }
@@ -178,7 +190,7 @@ void loop()
         case REFLOW_STATE_HEATING:
           // 本加熱
           char_lcd->write_str(0,"HEAT");
-          if(time_count >= time_heat-5.0){
+          if(time_count >= time_heat*2){
             next_reflow_state = REFLOW_STATE_COOLING;
             target_temp = 0;
             controller->stop();
